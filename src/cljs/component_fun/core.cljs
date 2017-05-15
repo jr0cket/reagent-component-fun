@@ -61,9 +61,71 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Progress Bar
+
+(rf/reg-event-db
+  :initialize
+  (fn [_ _]
+    {:done 0 :total 100}))
+
+(rf/reg-event-db
+  :set-total
+  (fn [db [_ total]]
+    (assoc db :total total :done 0)))
+
+(rf/reg-event-db
+  :inc-done
+  (fn [db [_ done]]
+    (if (>= (+ done (:done db)) (:total db))
+      (assoc db :done (:total db))
+      (update db :done + done))))
+
+(rf/dispatch-sync [:set-total 100])
+
+(defonce _interval (js/setInterval
+                     #(rf/dispatch-sync [:inc-done 3])
+                     1000))
+
+(rf/reg-sub
+  :total
+  (fn [db] (:total db)))
+
+(rf/reg-sub
+  :done
+  (fn [db] (:done db)))
+
+(defn progress [done]
+  (let [s (reagent/atom {})]
+    (fn [done]
+      (let [done (str (.toFixed (* 100 done) 1) "%")]
+        [:div {:style {:position :relative
+                       :line-height "1.3em"}}
+         [:div {:style {:background-color :green
+                        :top 0
+                        :bottom 0
+                        :transition "width 0.1s"
+                        :width done
+                        :position :absolute
+                        :overflow :hidden}}
+          [:span {:style {:margin-left (:left @s)
+                          :color :white}}
+           done]]
+         [:div {:style {:text-align :center}}
+          [:span
+           {:ref #(if %
+                    (swap! s assoc :left (.-offsetLeft %))
+                    (swap! s assoc :left 0))}
+           done]]]))))
+
+;; End of Progress Bar
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 (defn ui []
   [:div
-   [panel :ex-1 "Example component" [example-component]]])
+   [panel :ex-1 "Example component" [example-component]]
+   [progress (/ @(rf/subscribe [:done]) @(rf/subscribe [:total]))]])
 
 (defonce _init (rf/dispatch-sync [:initialize]))
 (reagent/render [ui] (js/document.getElementById "app"))
